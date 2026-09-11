@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 if (( BASH_VERSINFO[0] < 4 )); then
-    utils::error 'install_fonts.sh requires Bash 4 or newer.'
+    common::error 'install_fonts.sh requires Bash 4 or newer.'
     exit 1
 fi
 
@@ -66,52 +66,52 @@ fonts::register() {
     local repository_owner repository_name existing_id
 
     if [[ ! "$id" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || [[ "$id" == "all" ]]; then
-        utils::die "Invalid or reserved font ID in catalog: ${id:-empty}"
+        common::die "Invalid or reserved font ID in catalog: ${id:-empty}"
     fi
     if [[ -z "$label" ]] || [[ -z "$family" ]]; then
-        utils::die "Catalog entry '$id' is missing its label or family."
+        common::die "Catalog entry '$id' is missing its label or family."
     fi
     if [[ ! "$repository" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
-        utils::die "Catalog repository for '$id' must be an owner/name pair."
+        common::die "Catalog repository for '$id' must be an owner/name pair."
     fi
     repository_owner="${repository%%/*}"
     repository_name="${repository#*/}"
     if [[ "$repository_owner" == "." ]] || [[ "$repository_owner" == ".." ]] ||
         [[ "$repository_name" == "." ]] || [[ "$repository_name" == ".." ]]; then
-        utils::die "Catalog repository for '$id' contains a reserved path component."
+        common::die "Catalog repository for '$id' contains a reserved path component."
     fi
     if [[ ! "$asset" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
-        utils::die "Catalog asset for '$id' must be a safe filename."
+        common::die "Catalog asset for '$id' must be a safe filename."
     fi
     case "$payload" in
         tar.xz|file) ;;
-        *) utils::die "Unsupported catalog payload for '$id': $payload" ;;
+        *) common::die "Unsupported catalog payload for '$id': $payload" ;;
     esac
     if [[ -z "$file_glob" ]] || [[ "$file_glob" == */* ]]; then
-        utils::die "Catalog font glob for '$id' must not contain a path."
+        common::die "Catalog font glob for '$id' must not contain a path."
     fi
     if [[ ! "$destination" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
-        utils::die "Catalog destination for '$id' must be a safe directory name."
+        common::die "Catalog destination for '$id' must be a safe directory name."
     fi
     case "$hook" in
         none|apple-emoji) ;;
-        *) utils::die "Unsupported catalog hook for '$id': $hook" ;;
+        *) common::die "Unsupported catalog hook for '$id': $hook" ;;
     esac
     if [[ -n "$legacy_user" ]] &&
         { [[ "$legacy_user" == /* ]] || [[ "$legacy_user" == *".."* ]]; }; then
-        utils::die "Catalog user legacy path for '$id' must be a safe relative path."
+        common::die "Catalog user legacy path for '$id' must be a safe relative path."
     fi
     if [[ -n "$legacy_system" ]] &&
         { [[ "$legacy_system" != /usr/share/fonts/* ]] || [[ "$legacy_system" == *".."* ]]; }; then
-        utils::die "Catalog system legacy path for '$id' must stay under /usr/share/fonts."
+        common::die "Catalog system legacy path for '$id' must stay under /usr/share/fonts."
     fi
 
     for existing_id in "${FONT_IDS[@]}"; do
         if [[ "$existing_id" == "$id" ]]; then
-            utils::die "Duplicate font ID in catalog: $id"
+            common::die "Duplicate font ID in catalog: $id"
         fi
         if [[ "${FONT_DESTINATION[$existing_id]}" == "$destination" ]]; then
-            utils::die "Duplicate font destination in catalog: $destination"
+            common::die "Duplicate font destination in catalog: $destination"
         fi
     done
 
@@ -185,7 +185,7 @@ fonts::register_catalog() {
 fonts::list() {
     local id
 
-    utils::step 'Available fonts (latest stable release)'
+    common::step 'Available fonts (latest stable release)'
     for id in "${FONT_IDS[@]}"; do
         printf '  %-18s %-30s %s\n' \
             "$id" \
@@ -195,7 +195,7 @@ fonts::list() {
 }
 
 usage() {
-    utils::step 'Usage: install_fonts.sh [OPTIONS] FONT...'
+    common::step 'Usage: install_fonts.sh [OPTIONS] FONT...'
     printf '\n'
     fonts::list
     cat <<'EOF'
@@ -223,7 +223,7 @@ EOF
 }
 
 fonts::usage_error() {
-    utils::error "$*"
+    common::error "$*"
     printf '\n' >&2
     usage >&2
     exit 2
@@ -346,7 +346,7 @@ fonts::cleanup() {
             rm -rf -- "$TEMP_DIR"
         ;;
         *)
-            utils::warn "Refusing to remove unexpected temporary directory: $TEMP_DIR"
+            common::warn "Refusing to remove unexpected temporary directory: $TEMP_DIR"
         ;;
     esac
 }
@@ -362,7 +362,7 @@ fonts::handle_terminate() {
 fonts::require_command() {
     local command_name="$1"
     command -v "$command_name" >/dev/null 2>&1 ||
-        utils::die "Missing required command: $command_name"
+        common::die "Missing required command: $command_name"
 }
 
 fonts::check_requirements() {
@@ -416,7 +416,7 @@ fonts::hook_is_enabled() {
     case "${FONT_HOOK[$id]}" in
         none) return 1 ;;
         apple-emoji) [[ "$EMOJI_CONFIG" == true ]] ;;
-        *) utils::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
+        *) common::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
     esac
 }
 
@@ -443,22 +443,22 @@ fonts::resolve_paths() {
     if [[ "$SCOPE" == "system" ]]; then
         INSTALL_ROOT="/usr/local/share/fonts"
         FONTCONFIG_ROOT="/etc/fonts/conf.d"
-        utils::step "System-wide install selected. Privileged writes will use sudo when needed."
+        common::step "System-wide install selected. Privileged writes will use sudo when needed."
         return
     fi
 
     if [[ "$EUID" -eq 0 ]]; then
-        utils::die "Refusing a user install as root. Use --system for a system install."
+        common::die "Refusing a user install as root. Use --system for a system install."
     fi
 
     data_home="${XDG_DATA_HOME:-}"
     if [[ -n "$data_home" ]] && [[ "$data_home" != /* ]]; then
-        utils::warn "Ignoring relative XDG_DATA_HOME: $data_home"
+        common::warn "Ignoring relative XDG_DATA_HOME: $data_home"
         data_home=""
     fi
     if [[ -z "$data_home" ]]; then
         if [[ -z "${HOME:-}" ]] || [[ "$HOME" != /* ]]; then
-            utils::die "HOME must be absolute when XDG_DATA_HOME is not set."
+            common::die "HOME must be absolute when XDG_DATA_HOME is not set."
         fi
         data_home="$HOME/.local/share"
     fi
@@ -466,12 +466,12 @@ fonts::resolve_paths() {
     if fonts::selection_has_fontconfig_hook; then
         config_home="${XDG_CONFIG_HOME:-}"
         if [[ -n "$config_home" ]] && [[ "$config_home" != /* ]]; then
-            utils::warn "Ignoring relative XDG_CONFIG_HOME: $config_home"
+            common::warn "Ignoring relative XDG_CONFIG_HOME: $config_home"
             config_home=""
         fi
         if [[ -z "$config_home" ]]; then
             if [[ -z "${HOME:-}" ]] || [[ "$HOME" != /* ]]; then
-                utils::die "HOME must be absolute when XDG_CONFIG_HOME is not set."
+                common::die "HOME must be absolute when XDG_CONFIG_HOME is not set."
             fi
             config_home="$HOME/.config"
         fi
@@ -479,7 +479,7 @@ fonts::resolve_paths() {
     fi
 
     INSTALL_ROOT="$data_home/fonts"
-    utils::step "User install selected."
+    common::step "User install selected."
 }
 
 fonts::legacy_apple_config_contents() {
@@ -715,7 +715,7 @@ fonts::report_legacy() {
     local id="$1"
     local path
 
-    utils::warn "Legacy ${FONT_LABEL[$id]} state detected:"
+    common::warn "Legacy ${FONT_LABEL[$id]} state detected:"
     while IFS= read -r path; do
         [[ -n "$path" ]] && printf '    %s\n' "$path" >&2
     done <<< "${DETECTED_LEGACY_FONTS[$id]:-}"
@@ -747,14 +747,14 @@ fonts::evaluate_legacy() {
 
         fonts::report_legacy "$id"
         if [[ -n "${DETECTED_CONFIG_CONFLICT[$id]:-}" ]]; then
-            utils::warn "Skipping ${FONT_LABEL[$id]}; the config is not safe to change automatically."
+            common::warn "Skipping ${FONT_LABEL[$id]}; the config is not safe to change automatically."
             SKIPPED_FONTS+=("$id")
         elif [[ "$FORCE" == true ]]; then
-            utils::step "--force will migrate ${FONT_LABEL[$id]} after its download validates."
+            common::step "--force will migrate ${FONT_LABEL[$id]} after its download validates."
             ACTIVE_FONTS+=("$id")
             MIGRATION_FONTS+=("$id")
         else
-            utils::warn "Skipping ${FONT_LABEL[$id]}; rerun with --force to migrate it."
+            common::warn "Skipping ${FONT_LABEL[$id]}; rerun with --force to migrate it."
             SKIPPED_FONTS+=("$id")
         fi
     done
@@ -764,14 +764,14 @@ fonts::evaluate_legacy() {
 fonts::create_temp_dir() {
     TEMP_ROOT="${TMPDIR:-/tmp}"
     if [[ "$TEMP_ROOT" != /* ]] || [[ ! -d "$TEMP_ROOT" ]]; then
-        utils::warn "Ignoring unusable TMPDIR: $TEMP_ROOT"
+        common::warn "Ignoring unusable TMPDIR: $TEMP_ROOT"
         TEMP_ROOT="/tmp"
     fi
     TEMP_ROOT="${TEMP_ROOT%/}"
     [[ -n "$TEMP_ROOT" ]] || TEMP_ROOT="/tmp"
 
     if ! TEMP_DIR="$(mktemp -d "$TEMP_ROOT/dotfiles-fonts.XXXXXXXX")"; then
-        utils::die "Could not create a temporary directory under $TEMP_ROOT."
+        common::die "Could not create a temporary directory under $TEMP_ROOT."
     fi
     trap fonts::cleanup EXIT
     trap fonts::handle_interrupt INT
@@ -785,7 +785,7 @@ fonts::download_file() {
     if ! curl --fail --location --silent --show-error --retry 3 \
         --proto '=https' --proto-redir '=https' \
         "$url" --output "$destination"; then
-        utils::die "Download failed: ${url##*/}"
+        common::die "Download failed: ${url##*/}"
     fi
 }
 
@@ -795,11 +795,11 @@ fonts::extract_archive() {
     local destination="$3"
 
     if ! tar --list --xz --file="$archive" >/dev/null; then
-        utils::die "Could not read the ${FONT_LABEL[$id]} archive."
+        common::die "Could not read the ${FONT_LABEL[$id]} archive."
     fi
     if ! tar --extract --xz --file="$archive" --directory="$destination" \
         --no-same-owner --no-same-permissions; then
-        utils::die "Could not extract the ${FONT_LABEL[$id]} archive."
+        common::die "Could not extract the ${FONT_LABEL[$id]} archive."
     fi
 }
 
@@ -825,10 +825,10 @@ fonts::verify_font_file() {
     local -a family_names=()
 
     if [[ ! -s "$font_file" ]]; then
-        utils::die "Downloaded font is empty: ${font_file##*/}"
+        common::die "Downloaded font is empty: ${font_file##*/}"
     fi
     if ! reported_families="$(fc-scan --format='%{family}\n' "$font_file")"; then
-        utils::die "Could not read font metadata from ${font_file##*/}."
+        common::die "Could not read font metadata from ${font_file##*/}."
     fi
     reported_families="${reported_families//$'\n'/,}"
     IFS=',' read -r -a family_names <<< "$reported_families"
@@ -839,7 +839,7 @@ fonts::verify_font_file() {
         fi
     done
     if [[ "$family_matches" != true ]]; then
-        utils::die \
+        common::die \
             "Unexpected family in ${font_file##*/}: ${reported_families:-unknown}"
     fi
 }
@@ -853,7 +853,7 @@ fonts::prepare() {
     local -a basenames=()
 
     mkdir -p -- "$stage_dir"
-    utils::step "Downloading the latest ${FONT_LABEL[$id]} release asset..."
+    common::step "Downloading the latest ${FONT_LABEL[$id]} release asset..."
 
     case "${FONT_PAYLOAD[$id]}" in
         tar.xz)
@@ -869,27 +869,27 @@ fonts::prepare() {
                 "$payload_file"
         ;;
         *)
-            utils::die "Unsupported payload for $id: ${FONT_PAYLOAD[$id]}"
+            common::die "Unsupported payload for $id: ${FONT_PAYLOAD[$id]}"
         ;;
     esac
 
     FONT_STAGE_DIR["$id"]="$stage_dir"
     fonts::collect_files "$id"
     if [[ "${#COLLECTED_FILES[@]}" -eq 0 ]]; then
-        utils::die "No matching font files were found for ${FONT_LABEL[$id]}."
+        common::die "No matching font files were found for ${FONT_LABEL[$id]}."
     fi
 
     for font_file in "${COLLECTED_FILES[@]}"; do
         basename="${font_file##*/}"
         for existing_basename in "${basenames[@]}"; do
             if [[ "$existing_basename" == "$basename" ]]; then
-                utils::die "Duplicate font filename in ${FONT_LABEL[$id]}: $basename"
+                common::die "Duplicate font filename in ${FONT_LABEL[$id]}: $basename"
             fi
         done
         basenames+=("$basename")
         fonts::verify_font_file "$id" "$font_file"
     done
-    utils::detail \
+    common::detail \
         "Validated ${#COLLECTED_FILES[@]} ${FONT_LABEL[$id]} font file(s)"
 }
 
@@ -953,7 +953,7 @@ fonts::set_legacy_basenames() {
             LEGACY_BASENAMES=(AppleColorEmoji.ttf)
         ;;
         *)
-            utils::die "No legacy filename manifest for $id."
+            common::die "No legacy filename manifest for $id."
         ;;
     esac
 }
@@ -964,18 +964,18 @@ fonts::validate_legacy_font_path() {
     local basename target
 
     if [[ ! -e "$path" ]] && [[ ! -L "$path" ]]; then
-        utils::die "Legacy font state changed before migration: $path"
+        common::die "Legacy font state changed before migration: $path"
     fi
     if [[ -L "$path" ]]; then
         return 0
     fi
     if [[ "$path" == */AppleColorEmoji.ttf ]]; then
         [[ -f "$path" ]] ||
-            utils::die "Refusing to remove unexpected legacy path type: $path"
+            common::die "Refusing to remove unexpected legacy path type: $path"
         return 0
     fi
     [[ -d "$path" ]] ||
-        utils::die "Refusing to remove unexpected legacy path type: $path"
+        common::die "Refusing to remove unexpected legacy path type: $path"
 
     fonts::set_legacy_basenames "$id"
     for basename in "${LEGACY_BASENAMES[@]}"; do
@@ -983,11 +983,11 @@ fonts::validate_legacy_font_path() {
         if [[ -L "$target" ]] || [[ -f "$target" ]] || [[ ! -e "$target" ]]; then
             continue
         fi
-        utils::die "Refusing to remove unexpected legacy font type: $target"
+        common::die "Refusing to remove unexpected legacy font type: $target"
     done
     if ! fonts::run_for_scope find \
         "$path" -mindepth 1 -maxdepth 1 -print -quit >/dev/null; then
-        utils::die "Could not inspect legacy font directory: $path"
+        common::die "Could not inspect legacy font directory: $path"
     fi
 }
 
@@ -1002,10 +1002,10 @@ fonts::validate_replaceable_apple_config() {
         fonts::file_mentions_apple_emoji "$config_file"; then
         :
     else
-        utils::die "The Apple Emoji config changed before migration: $config_file"
+        common::die "The Apple Emoji config changed before migration: $config_file"
     fi
     if [[ -e "$backup_file" ]] || [[ -L "$backup_file" ]]; then
-        utils::die "Refusing to replace an existing config backup: $backup_file"
+        common::die "Refusing to replace an existing config backup: $backup_file"
     fi
     CONFIG_BACKUP_TARGET["$id"]="$backup_file"
 }
@@ -1017,14 +1017,14 @@ fonts::validate_migration_plan() {
     config_file="${DETECTED_LEGACY_CONFIG[$id]:-}"
     if [[ -n "$config_file" ]] &&
         ! fonts::is_exact_legacy_apple_config "$config_file"; then
-        utils::die "The legacy Apple Emoji config changed before migration: $config_file"
+        common::die "The legacy Apple Emoji config changed before migration: $config_file"
     fi
     if [[ -n "${DETECTED_REPLACEABLE_CONFIG[$id]:-}" ]]; then
         fonts::validate_replaceable_apple_config "$id"
     fi
     if [[ -n "${DETECTED_LEGACY_BACKUP[$id]:-}" ]] &&
         ! fonts::system_legacy_backup_is_proven; then
-        utils::die "The legacy 60-generic.conf state changed before migration."
+        common::die "The legacy 60-generic.conf state changed before migration."
     fi
     while IFS= read -r path; do
         [[ -n "$path" ]] && fonts::validate_legacy_font_path "$id" "$path"
@@ -1050,17 +1050,17 @@ fonts::remove_legacy_font_path() {
         return 0
     fi
 
-    utils::step "Removing legacy font artifact: $path"
+    common::step "Removing legacy font artifact: $path"
     if [[ -L "$path" ]]; then
         fonts::run_for_scope rm -f -- "$path"
         return 0
     fi
     if [[ "$path" == */AppleColorEmoji.ttf ]]; then
-        [[ -f "$path" ]] || utils::die "Refusing to remove unexpected legacy path type: $path"
+        [[ -f "$path" ]] || common::die "Refusing to remove unexpected legacy path type: $path"
         fonts::run_for_scope rm -f -- "$path"
         return 0
     fi
-    [[ -d "$path" ]] || utils::die "Refusing to remove unexpected legacy path type: $path"
+    [[ -d "$path" ]] || common::die "Refusing to remove unexpected legacy path type: $path"
 
     fonts::set_legacy_basenames "$id"
     for basename in "${LEGACY_BASENAMES[@]}"; do
@@ -1068,19 +1068,19 @@ fonts::remove_legacy_font_path() {
         if [[ -L "$target" ]] || [[ -f "$target" ]]; then
             fonts::run_for_scope rm -f -- "$target"
         elif [[ -e "$target" ]]; then
-            utils::die "Refusing to remove unexpected legacy font type: $target"
+            common::die "Refusing to remove unexpected legacy font type: $target"
         fi
     done
 
     if ! remaining="$(
         fonts::run_for_scope find "$path" -mindepth 1 -maxdepth 1 -print -quit
     )"; then
-        utils::die "Could not inspect legacy font directory: $path"
+        common::die "Could not inspect legacy font directory: $path"
     fi
     if [[ -z "$remaining" ]]; then
         fonts::run_for_scope rmdir -- "$path"
     else
-        utils::warn "Legacy directory contains unrecognized files and was kept: $path"
+        common::warn "Legacy directory contains unrecognized files and was kept: $path"
     fi
 }
 
@@ -1092,33 +1092,33 @@ fonts::restore_legacy_system_config() {
     local active_content clean_file temporary_link
 
     if ! fonts::system_legacy_backup_is_proven; then
-        utils::die "The legacy 60-generic.conf state changed during migration."
+        common::die "The legacy 60-generic.conf state changed during migration."
     fi
     if ! active_content="$(<"$active_config")"; then
-        utils::die "Could not read the active 60-generic.conf during migration."
+        common::die "Could not read the active 60-generic.conf during migration."
     fi
     if [[ -f "$canonical_config" ]] && [[ ! -L "$canonical_config" ]] &&
         [[ -r "$canonical_config" ]]; then
         if [[ ! -L "$active_config" ]] ||
             [[ ! "$active_config" -ef "$canonical_config" ]]; then
-            utils::step "Restoring the distribution fontconfig symlink..."
+            common::step "Restoring the distribution fontconfig symlink..."
             temporary_link="/etc/fonts/conf.d/.60-generic.conf.install_fonts.${TEMP_DIR##*/}"
             if [[ -e "$temporary_link" ]] || [[ -L "$temporary_link" ]]; then
-                utils::die "Refusing to replace an unexpected temporary link: $temporary_link"
+                common::die "Refusing to replace an unexpected temporary link: $temporary_link"
             fi
             fonts::run_for_scope ln -s -- "$canonical_config" "$temporary_link"
             if ! fonts::run_for_scope mv -Tf -- "$temporary_link" "$active_config"; then
                 fonts::run_for_scope rm -f -- "$temporary_link" || true
-                utils::die "Could not atomically restore the distribution fontconfig symlink."
+                common::die "Could not atomically restore the distribution fontconfig symlink."
             fi
         fi
     elif [[ "$active_content" != "$SYSTEM_CLEAN_CONFIG_CONTENT" ]]; then
         clean_file="$TEMP_DIR/60-generic.clean.conf"
         printf '%s\n' "$SYSTEM_CLEAN_CONFIG_CONTENT" > "$clean_file"
-        utils::step "Restoring 60-generic.conf from the proven legacy backup..."
+        common::step "Restoring 60-generic.conf from the proven legacy backup..."
         fonts::run_for_scope install -m 0644 -- "$clean_file" "$active_config"
     fi
-    utils::step "Removing the proven legacy fontconfig backup: $backup_config"
+    common::step "Removing the proven legacy fontconfig backup: $backup_config"
     fonts::run_for_scope rm -f -- "$backup_config"
 }
 
@@ -1128,16 +1128,16 @@ fonts::migrate_legacy() {
 
     package="${DETECTED_LEGACY_PACKAGE[$id]:-}"
     if [[ -n "$package" ]]; then
-        utils::step "Removing legacy package: $package"
+        common::step "Removing legacy package: $package"
         fonts::run_for_scope dpkg --remove "$package"
     fi
 
     config_file="${DETECTED_LEGACY_CONFIG[$id]:-}"
     if [[ -n "$config_file" ]]; then
         if ! fonts::is_exact_legacy_apple_config "$config_file"; then
-            utils::die "The legacy Apple Emoji config changed during migration: $config_file"
+            common::die "The legacy Apple Emoji config changed during migration: $config_file"
         fi
-        utils::step "Removing legacy Apple Emoji config: $config_file"
+        common::step "Removing legacy Apple Emoji config: $config_file"
         fonts::run_for_scope rm -f -- "$config_file"
     fi
 
@@ -1145,7 +1145,7 @@ fonts::migrate_legacy() {
     if [[ -n "$config_file" ]]; then
         fonts::validate_replaceable_apple_config "$id"
         config_backup="${CONFIG_BACKUP_TARGET[$id]}"
-        utils::step "Preserving the previous Apple Emoji config at $config_backup..."
+        common::step "Preserving the previous Apple Emoji config at $config_backup..."
         fonts::run_for_scope mv -- "$config_file" "$config_backup"
     fi
 
@@ -1164,10 +1164,10 @@ fonts::validate_install_target() {
     local destination="$INSTALL_ROOT/${FONT_DESTINATION[$id]}"
 
     if [[ -L "$destination" ]]; then
-        utils::die "Refusing to install through a symbolic link: $destination"
+        common::die "Refusing to install through a symbolic link: $destination"
     fi
     if [[ -e "$destination" ]] && [[ ! -d "$destination" ]]; then
-        utils::die "Font destination exists but is not a directory: $destination"
+        common::die "Font destination exists but is not a directory: $destination"
     fi
 }
 
@@ -1187,18 +1187,18 @@ fonts::install_font() {
     fonts::collect_files "$id"
     fonts::validate_install_target "$id"
 
-    utils::step "Installing ${FONT_LABEL[$id]} to $destination..."
+    common::step "Installing ${FONT_LABEL[$id]} to $destination..."
     fonts::run_for_scope install -d -m 0755 -- "$destination"
     fonts::run_for_scope install -m 0644 -- "${COLLECTED_FILES[@]}" "$destination/"
 
     for font_file in "${COLLECTED_FILES[@]}"; do
         installed_file="$destination/${font_file##*/}"
         [[ -f "$installed_file" ]] ||
-            utils::die "Installation verification failed: $installed_file"
+            common::die "Installation verification failed: $installed_file"
     done
 
     INSTALLED_DIRS+=("$destination")
-    utils::detail \
+    common::detail \
         "Installed ${#COLLECTED_FILES[@]} ${FONT_LABEL[$id]} font file(s)"
 }
 
@@ -1216,14 +1216,14 @@ fonts::validate_apple_config_target() {
     local target="$FONTCONFIG_ROOT/$APPLE_CONFIG_NAME"
 
     if [[ -L "$target" ]]; then
-        utils::die "Refusing to replace a symbolic-link fontconfig fragment: $target"
+        common::die "Refusing to replace a symbolic-link fontconfig fragment: $target"
     fi
     if [[ -e "$target" ]]; then
         if [[ ! -f "$target" ]]; then
-            utils::die "Fontconfig target exists but is not a file: $target"
+            common::die "Fontconfig target exists but is not a file: $target"
         fi
         if ! fonts::is_managed_apple_config "$target"; then
-            utils::die "Refusing to replace an unmanaged fontconfig fragment: $target"
+            common::die "Refusing to replace an unmanaged fontconfig fragment: $target"
         fi
     fi
 }
@@ -1238,7 +1238,7 @@ fonts::validate_hook_targets() {
         case "${FONT_HOOK[$id]}" in
             none) ;;
             apple-emoji) fonts::validate_apple_config_target ;;
-            *) utils::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
+            *) common::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
         esac
     done
 }
@@ -1280,10 +1280,10 @@ fonts::configure_apple_emoji() {
 </fontconfig>
 EOF
 
-    utils::step "Installing the Apple Color Emoji fontconfig fragment..."
+    common::step "Installing the Apple Color Emoji fontconfig fragment..."
     fonts::run_for_scope install -d -m 0755 -- "$FONTCONFIG_ROOT"
     fonts::run_for_scope install -m 0644 -- "$source_file" "$target"
-    utils::detail "Installed fontconfig fragment at $target"
+    common::detail "Installed fontconfig fragment at $target"
 }
 
 fonts::run_hooks() {
@@ -1296,7 +1296,7 @@ fonts::run_hooks() {
         case "${FONT_HOOK[$id]}" in
             none) ;;
             apple-emoji) fonts::configure_apple_emoji ;;
-            *) utils::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
+            *) common::die "Unsupported post-install hook for $id: ${FONT_HOOK[$id]}" ;;
         esac
     done
 }
@@ -1308,13 +1308,13 @@ main() {
     fonts::parse_args "$@"
 
     if [[ "$(uname -s)" != "Linux" ]]; then
-        utils::die "This installer currently supports Linux only."
+        common::die "This installer currently supports Linux only."
     fi
 
     fonts::resolve_paths
     fonts::evaluate_legacy
     if [[ "${#ACTIVE_FONTS[@]}" -eq 0 ]]; then
-        utils::summary 'Every selected font was skipped; no changes were made.' Skipped
+        common::summary 'Every selected font was skipped; no changes were made.'
         return 0
     fi
 
@@ -1337,22 +1337,22 @@ main() {
         fonts::migrate_legacy "$id"
     done
 
-    utils::step "Refreshing the font cache..."
+    common::step "Refreshing the font cache..."
     if [[ "${#MIGRATION_FONTS[@]}" -gt 0 ]]; then
         if ! fonts::run_for_scope fc-cache -f >/dev/null; then
-            utils::die "Font cache refresh failed."
+            common::die "Font cache refresh failed."
         fi
     elif ! fonts::run_for_scope fc-cache -f "${INSTALLED_DIRS[@]}" >/dev/null; then
-        utils::die "Font cache refresh failed."
+        common::die "Font cache refresh failed."
     fi
-    utils::detail "Font cache refreshed"
+    common::detail "Font cache refreshed"
 
     for id in "${ACTIVE_FONTS[@]}"; do
-        utils::detail "${FONT_LABEL[$id]} family: ${FONT_FAMILY[$id]}"
+        common::detail "${FONT_LABEL[$id]} family: ${FONT_FAMILY[$id]}"
     done
     [[ "${#SKIPPED_FONTS[@]}" -eq 0 ]] ||
-        utils::warn "${#SKIPPED_FONTS[@]} selected font(s) were skipped."
-    utils::summary "Installed ${#ACTIVE_FONTS[@]} font family selection(s); ${#SKIPPED_FONTS[@]} skipped" Installed
+        common::warn "${#SKIPPED_FONTS[@]} selected font(s) were skipped."
+    common::summary "Installed ${#ACTIVE_FONTS[@]} font family selection(s); ${#SKIPPED_FONTS[@]} skipped"
 }
 
 main "$@"
