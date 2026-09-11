@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'Terminal.Common.ps1')
+. (Join-Path $PSScriptRoot 'Common.ps1')
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -308,9 +308,9 @@ try {
     Write-Detail 'Restart Windows Terminal and VS Code, then open a new terminal.'
     Write-Detail 'Project settings and explicit powershell.exe calls can still select another shell.'
     if ($changes.Count -eq 0) {
-        Write-Summary 'PowerShell 7 is already the default. No profile changes needed.' -Outcome Unchanged
+        Write-Summary 'PowerShell 7 is already the default. No profile changes needed.'
     } else {
-        Write-Summary "PowerShell 7 defaults updated in $($changes.Count) terminal and editor settings files." -Outcome Configured
+        Write-Summary "PowerShell 7 defaults updated in $($changes.Count) terminal and editor settings files."
     }
 } catch {
     Write-Failure $_.Exception.Message

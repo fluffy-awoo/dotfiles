@@ -7,11 +7,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'Terminal.Common.ps1')
+. (Join-Path $PSScriptRoot 'Common.ps1')
 
 try {
     if ($Help) {
-        Write-Step 'Usage: ./Install-CatppuccinTerminal.ps1 [options]'
+        Write-Step 'Usage: ./Install-CatppuccinWindowsTerminal.ps1 [options]'
         Write-Detail '-Flavor <names>       Comma-separated frappe, latte, macchiato, mocha; default: all.'
         Write-Detail '-SettingsPath <path>  Use a specific Windows Terminal settings file.'
         Write-Detail '-Remove               Restore the original terminal settings snapshot.'
@@ -26,7 +26,7 @@ try {
         Write-Step 'Restoring Windows Terminal settings'
         Write-Caution 'Restoring the shared snapshot also reverts later terminal settings edits.'
         Restore-OriginalFile -Path $SettingsPath
-        Write-Summary 'Windows Terminal settings restored' -Outcome Restored
+        Write-Summary 'Windows Terminal settings restored'
         return
     }
 
@@ -74,14 +74,12 @@ try {
         Save-OriginalFile -Path $SettingsPath
         Write-AtomicText -Path $SettingsPath -Content ($settings | ConvertTo-Json -Depth 100)
         $summary = "Installed $addedCount theme and color scheme entries"
-        $outcome = 'Installed'
     } else {
         $summary = 'All selected themes and color schemes are already installed'
-        $outcome = 'Unchanged'
     }
     Write-Step 'Caveats'
     Write-Detail 'Choose a Catppuccin color scheme in Windows Terminal Settings > Profiles > Appearance.'
-    Write-Summary $summary -Outcome $outcome
+    Write-Summary $summary
 } catch {
     Write-Failure $_.Exception.Message
     exit 1

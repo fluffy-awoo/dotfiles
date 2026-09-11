@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'Terminal.Common.ps1')
+. (Join-Path $PSScriptRoot 'Common.ps1')
 
 try {
     if ($Help) {
@@ -41,7 +41,7 @@ try {
         }
         Write-Step 'Caveats'
         Write-Detail 'Oh My Posh, installed fonts, and downloaded themes remain available.'
-        Write-Summary 'Original configuration restored' -Outcome Restored
+        Write-Summary 'Original configuration restored'
         return
     }
 
@@ -115,7 +115,7 @@ try {
     }
     Write-Step 'Caveats'
     Write-Detail 'Open a new PowerShell session to load your prompt.'
-    Write-Summary 'Oh My Posh configured' -Outcome Configured
+    Write-Summary 'Oh My Posh configured'
 } catch {
     Write-Failure $_.Exception.Message
     exit 1

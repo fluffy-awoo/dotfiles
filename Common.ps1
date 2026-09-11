@@ -46,29 +46,10 @@ function Write-Detail {
 }
 
 function Write-Summary {
-    param(
-        [string]$Message,
-        [ValidateSet('Installed', 'Configured', 'Restored', 'Unchanged')]
-        [string]$Outcome = 'Configured'
-    )
+    param([string]$Message)
 
     Write-Step 'Summary'
-    if ($null -ne $env:DOTFILES_NO_EMOJI) {
-        Write-Detail $Message
-        return
-    }
-    $badge = if ($null -ne $env:DOTFILES_SUMMARY_BADGE) {
-        $env:DOTFILES_SUMMARY_BADGE
-    } else {
-        $codePoint = @{
-            Installed = 0x1F4E6
-            Configured = 0x1F527
-            Restored = 0x1F504
-            Unchanged = 0x2705
-        }[$Outcome]
-        [char]::ConvertFromUtf32($codePoint)
-    }
-    Write-Detail "$badge  $Message"
+    Write-Detail "$([char]::ConvertFromUtf32(0x1F4E6))  $Message"
 }
 
 function Write-Caution {
