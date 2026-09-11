@@ -11,8 +11,8 @@ function Write-TerminalMessage {
     )
 
     $redirected = if ($StandardError) { [Console]::IsErrorRedirected } else { [Console]::IsOutputRedirected }
-    $forceColor = -not [string]::IsNullOrEmpty($env:HOMEBREW_COLOR)
-    $disableColor = $null -ne $env:NO_COLOR -or -not [string]::IsNullOrEmpty($env:HOMEBREW_NO_COLOR)
+    $forceColor = -not [string]::IsNullOrEmpty($env:DOTFILES_COLOR)
+    $disableColor = $null -ne $env:NO_COLOR -or -not [string]::IsNullOrEmpty($env:DOTFILES_NO_COLOR)
     $useColor = -not $disableColor -and ($forceColor -or (-not $redirected -and $env:TERM -ne 'dumb'))
     $stream = if ($StandardError) { [Console]::Error } else { [Console]::Out }
     if ($useColor -and ($Host.UI.SupportsVirtualTerminal -or $forceColor)) {
@@ -53,12 +53,12 @@ function Write-Summary {
     )
 
     Write-Step 'Summary'
-    if ($null -ne $env:HOMEBREW_NO_EMOJI) {
+    if ($null -ne $env:DOTFILES_NO_EMOJI) {
         Write-Detail $Message
         return
     }
-    $badge = if ($null -ne $env:HOMEBREW_INSTALL_BADGE) {
-        $env:HOMEBREW_INSTALL_BADGE
+    $badge = if ($null -ne $env:DOTFILES_SUMMARY_BADGE) {
+        $env:DOTFILES_SUMMARY_BADGE
     } else {
         $codePoint = @{
             Installed = 0x1F4E6
