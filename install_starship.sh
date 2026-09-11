@@ -15,23 +15,6 @@ TEMP_PRESET=""
 TEMP_CONFIG=""
 TEMP_ZSHRC=""
 
-starship::info() {
-    printf '%b[*]%b %s\n' "$BLUE" "$RESET" "$*"
-}
-
-starship::success() {
-    printf '%b[+]%b %s\n' "$GREEN" "$RESET" "$*"
-}
-
-starship::error() {
-    printf '%b[-]%b %s\n' "$RED" "$RESET" "$*" >&2
-}
-
-starship::die() {
-    starship::error "$*"
-    exit 1
-}
-
 starship::cleanup() {
     [[ -z "$TEMP_INSTALLER" ]] || rm -f -- "$TEMP_INSTALLER" || true
     [[ -z "$TEMP_PRESET" ]] || utils::exec_as_target rm -f -- "$TEMP_PRESET" || true
@@ -45,7 +28,7 @@ starship::run_privileged() {
         return
     fi
     command -v sudo >/dev/null 2>&1 ||
-        starship::die "sudo is required to install missing system packages."
+        utils::die "sudo is required to install missing system packages."
     sudo -- "$@"
 }
 
@@ -56,32 +39,32 @@ starship::assert_target_owned() {
     [[ -e "$path" ]] || return 0
     owner="$(stat -c '%U' -- "$path")"
     [[ "$owner" == "$TARGET_USER" ]] ||
-        starship::die "$path is owned by $owner, not $TARGET_USER. Refusing to replace it."
+        utils::die "$path is owned by $owner, not $TARGET_USER. Refusing to replace it."
 }
 
 starship::ensure_dependencies() {
     local -a packages=()
 
     [[ "$(uname -s)" == "Linux" ]] ||
-        starship::die "This installer currently supports Linux only."
+        utils::die "This installer currently supports Linux only."
 
     command -v zsh >/dev/null 2>&1 || packages+=(zsh)
     command -v curl >/dev/null 2>&1 || packages+=(curl)
 
     if [[ "${#packages[@]}" -eq 0 ]]; then
-        starship::success "zsh and curl are already installed"
+        utils::detail "zsh and curl are already installed"
     else
         command -v apt-get >/dev/null 2>&1 ||
-            starship::die "Missing ${packages[*]}; install them with your package manager, then rerun."
-        starship::info "Installing missing packages: ${packages[*]}"
+            utils::die "Missing ${packages[*]}; install them with your package manager, then rerun."
+        utils::step "Installing missing packages: ${packages[*]}"
         starship::run_privileged apt-get update
         starship::run_privileged apt-get install -y "${packages[@]}"
-        starship::success "Installed missing packages"
+        utils::detail "Installed missing packages"
     fi
 
     for command_name in awk grep install mkdir mktemp stat tar zsh; do
         command -v "$command_name" >/dev/null 2>&1 ||
-            starship::die "Missing required command: $command_name"
+            utils::die "Missing required command: $command_name"
     done
 }
 
@@ -106,23 +89,23 @@ starship::find_binary() {
 
 starship::install_binary() {
     if starship::find_binary; then
-        starship::success "Starship is already installed: $STARSHIP_BIN"
+        utils::detail "Starship is already installed: $STARSHIP_BIN"
         return
     fi
 
     TEMP_INSTALLER="$(mktemp "${TMPDIR:-/tmp}/starship-installer.XXXXXXXX")"
-    starship::info "Downloading the official Starship installer..."
+    utils::step "Downloading the official Starship installer..."
     if ! curl --fail --location --silent --show-error --retry 3 \
         --proto '=https' --proto-redir '=https' \
         https://starship.rs/install.sh --output "$TEMP_INSTALLER"; then
-        starship::die "Could not download the Starship installer."
+        utils::die "Could not download the Starship installer."
     fi
 
-    starship::info "Installing Starship system-wide..."
+    utils::step "Installing Starship system-wide..."
     starship::run_privileged sh "$TEMP_INSTALLER" -y
     starship::find_binary ||
-        starship::die "Starship installation completed, but its executable was not found."
-    starship::success "Installed Starship: $STARSHIP_BIN"
+        utils::die "Starship installation completed, but its executable was not found."
+    utils::detail "Installed Starship: $STARSHIP_BIN"
 }
 
 starship::prepare_config_target() {
@@ -130,23 +113,23 @@ starship::prepare_config_target() {
     STARSHIP_CONFIG="$TARGET_CONFIG_HOME/starship.toml"
 
     if [[ -L "$TARGET_CONFIG_HOME" ]]; then
-        starship::die "Refusing to write through a symbolic-link config directory: $TARGET_CONFIG_HOME"
+        utils::die "Refusing to write through a symbolic-link config directory: $TARGET_CONFIG_HOME"
     fi
     if [[ -e "$TARGET_CONFIG_HOME" ]] && [[ ! -d "$TARGET_CONFIG_HOME" ]]; then
-        starship::die "Config path is not a directory: $TARGET_CONFIG_HOME"
+        utils::die "Config path is not a directory: $TARGET_CONFIG_HOME"
     fi
     utils::exec_as_target mkdir -p -- "$TARGET_CONFIG_HOME"
 
     if [[ -L "$STARSHIP_CONFIG" ]]; then
-        starship::die "Refusing to replace a symbolic-link Starship config: $STARSHIP_CONFIG"
+        utils::die "Refusing to replace a symbolic-link Starship config: $STARSHIP_CONFIG"
     fi
     if [[ -e "$STARSHIP_CONFIG" ]] && [[ ! -f "$STARSHIP_CONFIG" ]]; then
-        starship::die "Starship config is not a regular file: $STARSHIP_CONFIG"
+        utils::die "Starship config is not a regular file: $STARSHIP_CONFIG"
     fi
     if [[ -f "$STARSHIP_CONFIG" ]]; then
         starship::assert_target_owned "$STARSHIP_CONFIG"
         if ! grep -Fqx "$CONFIG_MARKER" "$STARSHIP_CONFIG"; then
-            starship::die "Refusing to replace unmanaged Starship config: $STARSHIP_CONFIG"
+            utils::die "Refusing to replace unmanaged Starship config: $STARSHIP_CONFIG"
         fi
     fi
 
@@ -163,13 +146,10 @@ starship::write_catppuccin_config() {
         config_mode="0644"
     fi
 
-    starship::info "Generating the Catppuccin Powerline preset without time..."
+    utils::step "Generating the Catppuccin Powerline preset without time..."
     utils::exec_as_target \
         "$STARSHIP_BIN" preset catppuccin-powerline --force -o "$TEMP_PRESET"
 
-    # The preset's time segment has a leading separator, the $time module, and
-    # a trailing separator. Replace that three-line sequence with a single
-    # sapphire terminator, then remove the [time] configuration block.
     if ! awk -v marker="$CONFIG_MARKER" '
         BEGIN {
             print marker
@@ -210,16 +190,16 @@ starship::write_catppuccin_config() {
             }
         }
     ' "$TEMP_PRESET" > "$TEMP_CONFIG"; then
-        starship::die "The installed Catppuccin preset changed; could not safely remove its time module."
+        utils::die "The installed Catppuccin preset changed; could not safely remove its time module."
     fi
 
     if grep -Fq '$time' "$TEMP_CONFIG" ||
         grep -Eq '^[[:space:]]*\[time\][[:space:]]*$' "$TEMP_CONFIG"; then
-        starship::die "The generated Starship config still contains the time module."
+        utils::die "The generated Starship config still contains the time module."
     fi
 
     utils::exec_as_target install -m "$config_mode" -- "$TEMP_CONFIG" "$STARSHIP_CONFIG"
-    starship::success "Installed Catppuccin Powerline config without time: $STARSHIP_CONFIG"
+    utils::detail "Installed Catppuccin Powerline config without time: $STARSHIP_CONFIG"
 }
 
 starship::configure_zsh() {
@@ -227,10 +207,10 @@ starship::configure_zsh() {
     local zshrc_mode
 
     if [[ -L "$zshrc" ]]; then
-        starship::die "Refusing to update a symbolic-link Zsh config: $zshrc"
+        utils::die "Refusing to update a symbolic-link Zsh config: $zshrc"
     fi
     if [[ -e "$zshrc" ]] && [[ ! -f "$zshrc" ]]; then
-        starship::die "Zsh config is not a regular file: $zshrc"
+        utils::die "Zsh config is not a regular file: $zshrc"
     fi
     if [[ ! -e "$zshrc" ]]; then
         utils::exec_as_target touch -- "$zshrc"
@@ -261,7 +241,7 @@ starship::configure_zsh() {
             }
         }
     ' "$zshrc" > "$TEMP_ZSHRC"; then
-        starship::die "The existing managed Starship block in $zshrc is incomplete."
+        utils::die "The existing managed Starship block in $zshrc is incomplete."
     fi
 
     if [[ -s "$TEMP_ZSHRC" ]]; then
@@ -273,24 +253,27 @@ starship::configure_zsh() {
         "$ZSHRC_END" >> "$TEMP_ZSHRC"
 
     utils::exec_as_target install -m "$zshrc_mode" -- "$TEMP_ZSHRC" "$zshrc"
-    starship::success "Enabled Starship in $zshrc"
+    utils::detail "Enabled Starship in $zshrc"
 }
 
 main() {
     if ! utils::resolve_target_user; then
-        starship::die "Refusing to run as root without an invoking user. Run as your user or with sudo from your account."
+        utils::die "Refusing to run as root without an invoking user. Run as your user or with sudo from your account."
     fi
 
     trap starship::cleanup EXIT
 
-    starship::info "Target user: $TARGET_USER"
+    utils::step 'Setting up Starship'
+    utils::detail "Target user: $TARGET_USER"
     starship::ensure_dependencies
     starship::install_binary
     starship::prepare_config_target
     starship::write_catppuccin_config
     starship::configure_zsh
 
-    starship::success "Starship setup complete. Start Zsh with: exec zsh"
+    utils::step 'Caveats'
+    utils::detail 'Start Zsh with: exec zsh'
+    utils::summary 'Starship configured with Catppuccin Powerline' Configured
 }
 
 main "$@"

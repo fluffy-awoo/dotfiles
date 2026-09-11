@@ -3,21 +3,21 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
 
-echo -e "${BLUE}[+] Preparing pyenv installer...${NC}"
+utils::step "Preparing pyenv installer..."
 
 if ! utils::resolve_target_user; then
-    echo -e "${RED}[-] Refusing to run as root without an invoking user. Run as your user or with sudo from your account.${NC}"
+    utils::error "Refusing to run as root without an invoking user. Run as your user or with sudo from your account."
     exit 1
 fi
 
-echo -e "${YELLOW}[*] Target user:${NC} ${TARGET_USER}"
-echo -e "${YELLOW}[*] Target home:${NC} ${TARGET_HOME}"
+utils::detail "Target user: ${TARGET_USER}"
+utils::detail "Target home: ${TARGET_HOME}"
 
 DEPS=(make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
 libsqlite3-dev curl git libncursesw5-dev xz-utils tk-dev \
 libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev libzstd-dev)
 
-echo -e "${BLUE}[*] Checking for missing apt packages...${NC}"
+utils::step "Checking for missing apt packages..."
 TO_INSTALL=()
 for pkg in "${DEPS[@]}"; do
     if ! dpkg -s "$pkg" &>/dev/null; then
@@ -26,7 +26,7 @@ for pkg in "${DEPS[@]}"; do
 done
 
 if [ "${#TO_INSTALL[@]}" -gt 0 ]; then
-    echo -e "${BLUE}[*] Installing packages:${NC} ${TO_INSTALL[*]}"
+    utils::step "Installing packages: ${TO_INSTALL[*]}"
     if [[ "$AS_ROOT" == true ]]; then
         apt update
         apt install -y "${TO_INSTALL[@]}"
@@ -34,9 +34,9 @@ if [ "${#TO_INSTALL[@]}" -gt 0 ]; then
         sudo apt update
         sudo apt install -y "${TO_INSTALL[@]}"
     fi
-    echo -e "${GREEN}[+] Packages installed${NC}"
+    utils::detail "Packages installed"
 else
-    echo -e "${GREEN}[+] All build dependencies already present${NC}"
+    utils::detail "All build dependencies already present"
 fi
 
 PYENV_DIR="$TARGET_HOME/.pyenv"
@@ -46,38 +46,38 @@ if [[ -e "$PYENV_DIR" ]]; then
     FOREIGN_OWNER="$(find "$PYENV_DIR" ! -user "$TARGET_USER" -print -quit 2>/dev/null || true)"
     if [[ -n "$FOREIGN_OWNER" ]]; then
         TARGET_GROUP="$(id -gn "$TARGET_USER")"
-        echo -e "${RED}[-] ${PYENV_DIR} contains files not owned by ${TARGET_USER}.${NC}" >&2
-        echo -e "${RED}    Review them, then repair ownership once with:${NC}" >&2
-        echo -e "${YELLOW}    sudo chown -R '${TARGET_USER}:${TARGET_GROUP}' -- '${PYENV_DIR}'${NC}" >&2
+        utils::error "${PYENV_DIR} contains files not owned by ${TARGET_USER}."
+        utils::detail "Review them, then repair ownership once with:" >&2
+        utils::detail "sudo chown -R '${TARGET_USER}:${TARGET_GROUP}' -- '${PYENV_DIR}'" >&2
         exit 1
     fi
 fi
 
 if [[ -x "$PYENV_BIN" ]]; then
-    echo -e "${PURPLE}[*] Updating the existing pyenv installation for ${TARGET_USER}${NC}"
+    utils::step "Updating the existing pyenv installation for ${TARGET_USER}"
     if [[ -x "$PYENV_DIR/plugins/pyenv-update/bin/pyenv-update" ]]; then
         utils::run_as_target '"$HOME/.pyenv/bin/pyenv" update'
     else
         utils::run_as_target 'git -C "$HOME/.pyenv" pull --ff-only'
     fi
-    echo -e "${GREEN}[+] pyenv update finished${NC}"
+    utils::detail "pyenv update finished"
 elif [[ -e "$PYENV_DIR" ]]; then
-    echo -e "${RED}[-] ${PYENV_DIR} exists but does not contain an executable pyenv.${NC}" >&2
-    echo -e "${RED}    Move it aside after reviewing its installed Python versions, then rerun this script.${NC}" >&2
+    utils::error "${PYENV_DIR} exists but does not contain an executable pyenv."
+    utils::detail "Move it aside after reviewing its installed Python versions, then rerun this script." >&2
     exit 1
 else
-    echo -e "${PURPLE}[*] Installing pyenv via https://pyenv.run for ${TARGET_USER}${NC}"
+    utils::step "Installing pyenv via https://pyenv.run for ${TARGET_USER}"
     utils::run_as_target 'curl -fsSL https://pyenv.run | bash'
-    echo -e "${GREEN}[+] pyenv installer finished${NC}"
+    utils::detail "pyenv installer finished"
 fi
 
 if [[ ! -x "$PYENV_BIN" ]]; then
-    echo -e "${RED}[-] pyenv installation verification failed: ${PYENV_BIN} is not executable.${NC}" >&2
+    utils::error "pyenv installation verification failed: ${PYENV_BIN} is not executable."
     exit 1
 fi
 
 PYENV_VERSION="$(utils::run_as_target '"$HOME/.pyenv/bin/pyenv" --version')"
-echo -e "${GREEN}[+] Verified ${PYENV_VERSION}${NC}"
+utils::detail "Verified ${PYENV_VERSION}"
 
 ensure_file_exists() {
     local file="$1"
@@ -135,7 +135,7 @@ configure_shell_file() {
         return 1
     fi
     utils::exec_as_target rm -f -- "$tmp_file"
-    echo -e "${GREEN}[+] Updated $(basename "$file") for ${shell_name}${NC}"
+    utils::detail "Updated $(basename "$file") for ${shell_name}"
 }
 
 TARGET_SHELL="$(getent passwd "$TARGET_USER" | cut -d: -f7)"
@@ -162,10 +162,11 @@ case "$SHELL_NAME" in
         configure_shell_file "$TARGET_HOME/.zprofile" zsh false
     ;;
     *)
-        echo -e "${YELLOW}[*] Unsupported login shell '${SHELL_NAME:-unknown}'; shell startup files were not changed.${NC}"
-        echo -e "${YELLOW}    Configure it with: ${PYENV_BIN} init --install${NC}"
+        utils::warn "Unsupported login shell '${SHELL_NAME:-unknown}'; shell startup files were not changed."
+        utils::detail "Configure it with: ${PYENV_BIN} init --install" >&2
     ;;
 esac
 
-echo -e "${BLUE}[+] pyenv setup complete for ${TARGET_USER}${NC}"
-echo -e "${BLUE}    Restart with:${NC} ${YELLOW}exec \"\$SHELL\"${NC}"
+utils::step 'Caveats'
+utils::detail "Restart with: exec \"\$SHELL\""
+utils::summary "pyenv setup complete for ${TARGET_USER}" Configured

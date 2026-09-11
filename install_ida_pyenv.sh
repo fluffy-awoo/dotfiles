@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-info()    { echo -e "${CYAN}[INFO]${RESET} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${RESET} $*"; }
-error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
-success() { echo -e "${GREEN}[SUCCESS]${RESET} $*"; }
-
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
 
 if ! utils::resolve_target_user; then
-    error "Refusing to run as root without an invoking user. Run as your user, or use sudo from your account."
+    utils::die "Refusing to run as root without an invoking user. Run as your user, or use sudo from your account."
 fi
 
 run_as_target() {
@@ -32,18 +27,18 @@ while [[ $# -gt 0 ]]; do
             shift
         ;;
         --help|-h)
-            echo "Usage: $0 [--verbose|-v] [--rebuild] [PYVER]"
-            echo "Example: $0 --verbose 3.14.7"
+            utils::step "Usage: $0 [--verbose|-v] [--rebuild] [PYVER]"
+            utils::detail "Example: $0 --verbose 3.14.7"
             exit 0
         ;;
         -*)
-            error "Unknown option: $1"
+            utils::die "Unknown option: $1"
         ;;
         *)
             if [[ -z "$PYVER" ]]; then
                 PYVER="$1"
             else
-                warn "Extra argument: $1 (ignoring)"
+                utils::warn "Extra argument: $1 (ignoring)"
             fi
             shift
         ;;
@@ -53,24 +48,24 @@ done
 PYVER="${PYVER:-$DEFAULT_PYVER}"
 
 if [[ ! "$PYVER" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-    error "Python version must be a numeric major.minor or major.minor.patch value: $PYVER"
+    utils::die "Python version must be a numeric major.minor or major.minor.patch value: $PYVER"
 fi
 
 REQUESTED_PYVER="$PYVER"
 PYTHON_CONFIGURE_OPTS="--enable-shared --enable-optimizations --with-lto"
 PYTHON_CFLAGS="-march=native -mtune=native"
 
-run_as_target 'command -v pyenv >/dev/null 2>&1' || error "pyenv not found for $TARGET_USER."
+run_as_target 'command -v pyenv >/dev/null 2>&1' || utils::die "pyenv not found for $TARGET_USER."
 
 PYVER="$(run_as_target "pyenv latest -k '$REQUESTED_PYVER'")" || \
-    error "No pyenv CPython definition matches $REQUESTED_PYVER."
+    utils::die "No pyenv CPython definition matches $REQUESTED_PYVER."
 if [[ ! "$PYVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    error "Resolved pyenv version is not a stable CPython release: $PYVER"
+    utils::die "Resolved pyenv version is not a stable CPython release: $PYVER"
 fi
 PYENV_NAME="ida-$PYVER"
-info "Resolved Python $REQUESTED_PYVER to $PYVER (pyenv name: $PYENV_NAME)."
+utils::step "Resolved Python $REQUESTED_PYVER to $PYVER (pyenv name: $PYENV_NAME)."
 
-info "Searching for IDA installations..."
+utils::step "Searching for IDA installations..."
 ida_candidates=()
 shopt -s nullglob
 for p in /opt/*IDA* /opt/*ida* /usr/local/*IDA* /usr/local/*ida* \
@@ -92,7 +87,7 @@ if [ ${#ida_candidates[@]} -eq 0 ]; then
     done < <(find /opt /usr/local "$TARGET_HOME" -maxdepth 4 \( -type d -name "*IDA*" -o -type d -name "*ida*" \) -print0 2>/dev/null || true)
 fi
 
-[ ${#ida_candidates[@]} -gt 0 ] || error "No IDA installations found under /opt, /usr/local, or home."
+[ ${#ida_candidates[@]} -gt 0 ] || utils::die "No IDA installations found under /opt, /usr/local, or home."
 
 best=""
 best_ver=""
@@ -109,7 +104,7 @@ for p in "${ida_candidates[@]}"; do
 done
 
 if [[ -z "$best" ]]; then
-    info "No numeric version found — picking most recent by modification time."
+    utils::step "No numeric version found — picking most recent by modification time."
     newest=""
     newest_mtime=0
     for p in "${ida_candidates[@]}"; do
@@ -135,21 +130,21 @@ if [ -n "$IDA_APP" ]; then
     fi
 fi
 
-info "Detected IDA: ${GREEN}$IDA_APP${RESET}"
-[ -n "$IDA_SWITCH" ] || error "idapyswitch not found under $IDA_APP"
-[ -x "$IDA_SWITCH" ] || warn "idapyswitch found but not executable: $IDA_SWITCH"
+utils::step "Detected IDA: $IDA_APP"
+[ -n "$IDA_SWITCH" ] || utils::die "idapyswitch not found under $IDA_APP"
+[ -x "$IDA_SWITCH" ] || utils::warn "idapyswitch found but not executable: $IDA_SWITCH"
 
 if run_as_target "pyenv versions --bare | grep -qx '$PYENV_NAME'"; then
     if [[ "$REBUILD" == true ]]; then
-        warn "Rebuilding the existing IDA-specific pyenv version $PYENV_NAME."
+        utils::warn "Rebuilding the existing IDA-specific pyenv version $PYENV_NAME."
         run_as_target "pyenv uninstall -f '$PYENV_NAME'"
     else
-        info "Reusing existing IDA-specific pyenv version $PYENV_NAME."
+        utils::step "Reusing existing IDA-specific pyenv version $PYENV_NAME."
     fi
 fi
 
 if ! run_as_target "pyenv versions --bare | grep -qx '$PYENV_NAME'"; then
-    info "Building Python $PYVER as $PYENV_NAME..."
+    utils::step "Building Python $PYVER as $PYENV_NAME..."
     BUILD_ENV="env PYTHON_CONFIGURE_OPTS='$PYTHON_CONFIGURE_OPTS' PYTHON_CFLAGS='$PYTHON_CFLAGS'"
     if [[ "$VERBOSE" == true ]]; then
         run_as_target "$BUILD_ENV pyenv install --verbose '$PYVER:$PYENV_NAME'"
@@ -176,22 +171,22 @@ else
     LIBPY="$(find "$PYENV_PFX/lib" -maxdepth 1 \( -type f -o -type l \) -name "libpython${PYTHON_ABI}*.so*" -print | sort -V | head -n1 || true)"
 fi
 
-info "Build complete: $PYENV_PFX"
+utils::step "Build complete: $PYENV_PFX"
 if [ -z "$LIBPY" ]; then
-    error "libpython shared object not found under $PYENV_PFX/lib for Python $PYVER. Rerun with --rebuild."
+    utils::die "libpython shared object not found under $PYENV_PFX/lib for Python $PYVER. Rerun with --rebuild."
 fi
 
-info "Switching IDA python version..."
+utils::step "Switching IDA python version..."
 if [ -x "$IDA_SWITCH" ]; then
     utils::exec_as_target "$IDA_SWITCH" --force-path "$LIBPY" || {
-        warn "idapyswitch failed. Try manually:"
-        echo "  $IDA_SWITCH --force-path $LIBPY"
-        error "Registration failed."
+        utils::warn "idapyswitch failed. Try manually:"
+        utils::detail "  $IDA_SWITCH --force-path $LIBPY" >&2
+        utils::die "Registration failed."
     }
 else
-    warn "idapyswitch is not executable: $IDA_SWITCH"
-    echo "Try: chmod +x \"$IDA_SWITCH\" && \"$IDA_SWITCH\" --force-path \"$LIBPY\""
-    error "Registration failed."
+    utils::warn "idapyswitch is not executable: $IDA_SWITCH"
+    utils::detail "Try: chmod +x \"$IDA_SWITCH\" && \"$IDA_SWITCH\" --force-path \"$LIBPY\"" >&2
+    utils::die "Registration failed."
 fi
 
-success "IDA successfully registered with Python $PYVER."
+utils::summary "IDA registered with Python $PYVER" Configured

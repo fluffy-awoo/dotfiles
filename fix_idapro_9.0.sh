@@ -10,14 +10,14 @@ DEPS=(
 
 if ! utils::resolve_target_user; then
     if [[ "$EUID" -eq 0 ]]; then
-        echo -e "${YELLOW}[!] Running as root without sudo user context.${NC}"
+        utils::warn "Running as root without sudo user context."
         TARGET_HOME="$HOME"
         TARGET_USER="root"
         AS_ROOT=true
     fi
 fi
 
-echo -e "${BLUE}[*] Installing dependencies...${NC}"
+utils::step "Installing dependencies..."
 if [[ "$AS_ROOT" == true ]]; then
     apt update
     apt install -y "${DEPS[@]}"
@@ -25,10 +25,11 @@ else
     sudo apt update
     sudo apt install -y "${DEPS[@]}"
 fi
-echo -e "${GREEN}[+] Installed dependencies: ${DEPS[*]}${NC}"
+utils::detail "Installed dependencies: ${DEPS[*]}"
 
 if [[ "${1:-}" != "--path" ]]; then
-    echo -e "${YELLOW}[!] --path not provided; skipping PATH update.${NC}"
+    utils::detail 'PATH update was not requested.'
+    utils::summary 'IDA Pro dependencies installed' Installed
     exit 0
 fi
 
@@ -38,25 +39,27 @@ added=0
 
 for rc in "${RC_FILES[@]}"; do
     if [[ -f "$rc" ]]; then
-        echo -e "${BLUE}[*] Checking $rc...${NC}"
+        utils::step "Checking $rc..."
         if ! grep -Fq "$LINE" "$rc"; then
             if [[ "$AS_ROOT" == true ]] && [[ -n "${SUDO_USER:-}" ]]; then
                 sudo -u "$TARGET_USER" bash -lc "printf '\n# Added by %s on %s\n%s\n' \"$(basename "$0")\" \"$(date --iso-8601=seconds)\" '$LINE' >> '$rc'"
             else
                 printf '\n# Added by %s on %s\n%s\n' "$(basename "$0")" "$(date --iso-8601=seconds)" "$LINE" >> "$rc"
             fi
-            echo -e "${GREEN}[+] Appended PATH to $rc${NC}"
+            utils::detail "Appended PATH to $rc"
             added=1
         else
-            echo -e "${YELLOW}[*] PATH already present in $rc${NC}"
+            utils::detail "PATH already present in $rc"
         fi
     else
-        echo -e "${YELLOW}[-] $rc does not exist — skipping.${NC}"
+        utils::detail "$rc does not exist — skipping."
     fi
 done
 
 if [[ $added -eq 0 ]]; then
-    echo -e "${YELLOW}[!] No files were modified.${NC}"
+    utils::summary 'IDA Pro dependencies installed; no shell startup files changed' Installed
 else
-    echo -e "${GREEN}[+] Done. Source the updated rc(s) or restart your shell.${NC}"
+    utils::step 'Caveats'
+    utils::detail 'Restart your shell to apply the PATH changes.'
+    utils::summary 'IDA Pro dependencies and shell PATH configured' Configured
 fi
