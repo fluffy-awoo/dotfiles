@@ -62,6 +62,44 @@ function Write-Failure {
     Write-TerminalMessage -Prefix 'Error:' -Message $Message -Color Red -StandardError
 }
 
+function Read-MenuChoice {
+    param(
+        [string]$Title,
+        [ValidateCount(1, 9)]
+        [string[]]$Options,
+        [ValidateRange(0, 8)]
+        [int]$DefaultIndex = 0
+    )
+
+    if ($DefaultIndex -ge $Options.Count) { throw 'The default selection is outside the menu options.' }
+    if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) {
+        throw 'Interactive selection requires a terminal. Supply explicit script arguments instead.'
+    }
+    Write-Step $Title
+    for ($index = 0; $index -lt $Options.Count; $index++) {
+        $suffix = if ($index -eq $DefaultIndex) { ' (default)' } else { '' }
+        Write-Detail "  $($index + 1)) $($Options[$index])$suffix"
+    }
+    Write-Detail 'Enter for the default; Esc or Q to cancel.'
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq [ConsoleKey]::Escape -or $key.KeyChar -in @('q', 'Q')) {
+            Write-Detail 'Cancelled. No settings changed.'
+            return
+        }
+        $number = 0
+        if ($key.Key -eq [ConsoleKey]::Enter) {
+            $index = $DefaultIndex
+        } elseif ([int]::TryParse([string]$key.KeyChar, [ref]$number) -and $number -ge 1 -and $number -le $Options.Count) {
+            $index = $number - 1
+        } else {
+            continue
+        }
+        Write-Detail "Selected: $($Options[$index])"
+        return $index
+    }
+}
+
 function Assert-PowerShellVersion {
     if ($PSVersionTable.PSVersion.Major -lt 7) {
         throw 'PowerShell 7 or newer is required. Run this script using pwsh.'

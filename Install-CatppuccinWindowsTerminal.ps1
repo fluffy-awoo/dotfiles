@@ -12,17 +12,18 @@ $ErrorActionPreference = 'Stop'
 try {
     if ($Help) {
         Write-Step 'Usage: ./Install-CatppuccinWindowsTerminal.ps1 [options]'
-        Write-Detail '-Flavor <names>       Comma-separated frappe, latte, macchiato, mocha; default: all.'
+        Write-Detail '-Flavor <names>       Comma-separated frappe, latte, macchiato, mocha, or all.'
         Write-Detail '-SettingsPath <path>  Use a specific Windows Terminal settings file.'
         Write-Detail '-Remove               Restore the original terminal settings snapshot.'
         Write-Detail '-Help                 Show usage.'
+        Write-Detail 'Examples: ./Install-CatppuccinWindowsTerminal.ps1 -Flavor frappe'
+        Write-Detail '          ./Install-CatppuccinWindowsTerminal.ps1 -Flavor all'
         return
     }
 
     Assert-PowerShellVersion
-    $SettingsPath = Resolve-TerminalSettingsPath -Path $SettingsPath
-
     if ($Remove) {
+        $SettingsPath = Resolve-TerminalSettingsPath -Path $SettingsPath
         Write-Step 'Restoring Windows Terminal settings'
         Write-Caution 'Restoring the shared snapshot also reverts later terminal settings edits.'
         Restore-OriginalFile -Path $SettingsPath
@@ -30,17 +31,31 @@ try {
         return
     }
 
-    $availableFlavors = @('frappe', 'latte', 'macchiato', 'mocha')
-    $selectedFlavors = if ([string]::IsNullOrWhiteSpace($Flavor)) {
+    $flavorLabels = [ordered]@{
+        frappe = 'Frappé'
+        latte = 'Latte'
+        macchiato = 'Macchiato'
+        mocha = 'Mocha'
+    }
+    $availableFlavors = @($flavorLabels.Keys)
+    if (-not $PSBoundParameters.ContainsKey('Flavor')) {
+        $options = @($availableFlavors) + 'all'
+        $labels = @($flavorLabels.Values) + 'All presets'
+        $selection = Read-MenuChoice -Title 'Choose a Catppuccin color preset' -Options $labels -DefaultIndex 4
+        if ($null -eq $selection) { return }
+        $Flavor = $options[$selection]
+    }
+    $selectedFlavors = if ($Flavor.Trim() -ieq 'all') {
         $availableFlavors
     } else {
         @($Flavor -split '[,;]' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Select-Object -Unique)
     }
     $invalidFlavors = @($selectedFlavors | Where-Object { $_ -notin $availableFlavors })
     if ($invalidFlavors.Count -gt 0) {
-        throw "Invalid flavor: $($invalidFlavors -join ', '). Choose frappe, latte, macchiato, or mocha."
+        throw "Invalid flavor: $($invalidFlavors -join ', '). Choose frappe, latte, macchiato, mocha, or all."
     }
 
+    $SettingsPath = Resolve-TerminalSettingsPath -Path $SettingsPath
     Write-Step 'Installing Catppuccin for Windows Terminal'
     $settings = Read-Settings -Path $SettingsPath
     foreach ($property in @('themes', 'schemes')) {
@@ -50,7 +65,7 @@ try {
 
     $addedCount = 0
     foreach ($selectedFlavor in $selectedFlavors) {
-        Write-Step "Fetching Catppuccin $selectedFlavor"
+        Write-Step "Fetching Catppuccin $($flavorLabels[$selectedFlavor])"
         $baseUrl = 'https://raw.githubusercontent.com/catppuccin/windows-terminal/refs/heads/main'
         foreach ($resource in @(
             @{ Property = 'themes'; File = "${selectedFlavor}Theme.json" },
